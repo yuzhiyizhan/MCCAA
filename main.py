@@ -31,7 +31,12 @@ def debugOcr():
 class Tools(object):
     def __init__(self):
         """
-        sings 信号
+        初始化工具类，包含OCR实例和线程锁
+        
+        Attributes:
+            sings: 用于同步的信号量
+            ocr: PaddleOCR实例，用于文字识别
+            lock: 线程锁，用于同步操作
         """
         self.sings = None
         self.ocr = PaddleOCR(use_angle_cls=True, lang="ch")
@@ -39,10 +44,11 @@ class Tools(object):
 
     def ocr_exists(self, target_text, timeout=10):
         """
-        判断文字是否存在
-        :param target_text:
-        :param timeout:
-        :return:
+        判断目标文本是否存在于当前屏幕中，并返回其中心坐标
+        
+        :param target_text: 要检测的目标文本内容
+        :param timeout: 检测超时时间（秒），默认10秒
+        :return: 目标文本的中心坐标（元组形式），若超时未找到则返回False
         """
         startTime = time.time()
         logger.debug(f"判断: {target_text}")
@@ -66,10 +72,12 @@ class Tools(object):
 
     def ocr_exists_le(self, target_text, timeout=10, ratio=0.7):
         """
-        模糊匹配文字是否存在，针对ocr结果漏字，错字的情况
-        :param target_text:
-        :param timeout:
-        :return:
+        通过Levenshtein相似度模糊匹配目标文本是否存在，并返回其中心坐标
+        
+        :param target_text: 要检测的目标文本内容
+        :param timeout: 检测超时时间（秒），默认10秒
+        :param ratio: 相似度阈值（0-1），默认0.7
+        :return: 目标文本的中心坐标（元组形式），若超时未找到则返回False
         """
         startTime = time.time()
         logger.debug(f"判断: {target_text}")
@@ -93,11 +101,7 @@ class Tools(object):
 
     def click_number(self):
         """
-        检测并点击屏幕中的三位数文本（需先检测到"请选择宝物"提示）
-
-        Note:
-            1. 首先检测是否存在"请选择宝物"文本，存在时标记点击状态
-            2. 标记后检测三位数文本（正则匹配\d\d\d），找到后点击其中心坐标
+        检测到"请选择宝物"文本后，点击屏幕中三位数的文本内容
         """
         logger.debug("点击数字")
         _click = False
@@ -123,16 +127,11 @@ class Tools(object):
     def ocr_touch(self, target_text, click_timeout=0.5):
         """
         精确匹配目标文本并点击其中心坐标
-
-        Args:
-            target_text (str): 需要点击的目标文本内容
-            click_timeout (float): 点击前等待时间（单位：秒），默认0.5秒
-
-        Returns:
-            tuple: 点击的文本中心坐标元组(x, y)
-
-        Raises:
-            ValueError: 超时未找到目标文本时抛出
+        
+        :param target_text: 要点击的目标文本内容
+        :param click_timeout: 点击前等待时间（秒），默认0.5秒
+        :return: 目标文本的中心坐标（元组形式）
+        :raises ValueError: 未找到目标文本时抛出异常
         """
         logger.debug(f"准备点击: {target_text}")
         pic_path = r"./now.png"
@@ -163,21 +162,13 @@ class Tools(object):
 
     def ocr_touch_le(self, target_text, click_timeout=0.5, ratio=0.7):
         """
-        模糊匹配目标文本并点击其中心坐标（基于Levenshtein距离）
-
-        Args:
-            target_text (str): 需要点击的目标文本内容
-            click_timeout (float): 点击前等待时间（单位：秒），默认0.5秒
-            ratio (float): 相似度阈值（0-1），达到阈值即认为匹配，默认0.7
-
-        Returns:
-            tuple: 点击的文本中心坐标元组(x, y)
-
-        Raises:
-            ValueError: 超时未找到目标文本时抛出
-
-        Note:
-            与ocr_touch的区别：使用模糊匹配算法检测目标文本
+        模糊匹配目标文本并点击其中心坐标
+        
+        :param target_text: 要点击的目标文本内容
+        :param click_timeout: 点击前等待时间（秒），默认0.5秒
+        :param ratio: 相似度阈值（0-1），默认0.7
+        :return: 目标文本的中心坐标（元组形式）
+        :raises ValueError: 未找到目标文本时抛出异常
         """
         logger.debug(f"准备点击: {target_text}")
         pic_path = r"./now.png"
@@ -208,8 +199,9 @@ class Tools(object):
 
     def get_ocr_result(self):
         """
-        获取当前的文字结果
-        :return:
+        获取当前屏幕中所有识别到的文本及其中心坐标
+        
+        :return: 包含文本和对应中心坐标的列表（格式：[{text: (x,y)}]）
         """
         pic_path = r"./now.png"
         snapshot(pic_path)
@@ -228,12 +220,11 @@ class Tools(object):
 
     def click_txt(self, target_text, timeout=10, click_timeout=0.5):
         """
-        精确匹配目标文本并点击（调用ocr_exists获取坐标）
-
-        Args:
-            target_text (str): 需要点击的目标文本内容
-            timeout (int): 检测超时时间（单位：秒），默认10秒
-            click_timeout (float): 点击前等待时间（单位：秒），默认0.5秒
+        等待目标文本出现后点击其中心坐标
+        
+        :param target_text: 要点击的目标文本内容
+        :param timeout: 等待超时时间（秒），默认10秒
+        :param click_timeout: 点击前等待时间（秒），默认0.5秒
         """
         target_coords = self.ocr_exists(target_text, timeout)
         if target_coords:
@@ -242,13 +233,12 @@ class Tools(object):
 
     def click_txt_le(self, target_text, timeout=10, click_timeout=0.5, ratio=0.7):
         """
-        模糊匹配目标文本并点击（调用ocr_exists_le获取坐标）
-
-        Args:
-            target_text (str): 需要点击的目标文本内容
-            timeout (int): 检测超时时间（单位：秒），默认10秒
-            click_timeout (float): 点击前等待时间（单位：秒），默认0.5秒
-            ratio (float): 相似度阈值（0-1），默认0.7
+        等待模糊匹配的目标文本出现后点击其中心坐标
+        
+        :param target_text: 要点击的目标文本内容
+        :param timeout: 等待超时时间（秒），默认10秒
+        :param click_timeout: 点击前等待时间（秒），默认0.5秒
+        :param ratio: 相似度阈值（0-1），默认0.7
         """
         target_coords = self.ocr_exists_le(target_text, timeout, ratio)
         if target_coords:
@@ -257,26 +247,24 @@ class Tools(object):
 
     def wait_image(self, image):
         """
-        等待目标图片出现（阻塞直到找到或超时）
-
-        Args:
-            image (str): 图片名称（无需扩展名，默认查找images目录下的png文件）
-
-        Returns:
-            tuple: 找到的图片中心坐标元组(x, y)
+        等待指定图片出现在屏幕中
+        
+        :param image: 图片名称（不带扩展名，默认png格式）
+        :return: 图片在屏幕中的坐标（元组形式）
         """
         result = wait(Template(f"images/{image}.png"), timeout=30)
         return result
 
     def exists_image(self, image, timeout=10, threshold=0.7, interval=0.5, intervalfunc=None):
         """
-        返回图片坐标
-        :param image:
-        :param timeout:
-        :param threshold:
-        :param interval:
-        :param intervalfunc:
-        :return:
+        检测指定图片是否存在并返回其坐标
+        
+        :param image: 图片名称（不带扩展名，默认png格式）
+        :param timeout: 检测超时时间（秒），默认10秒
+        :param threshold: 图片匹配阈值（0-1），默认0.7
+        :param interval: 检测间隔时间（秒），默认0.5秒
+        :param intervalfunc: 检测间隔执行的函数（可选）
+        :return: 图片在屏幕中的坐标（元组形式），若超时未找到则返回False
         """
         query = Template(f"images/{image}.png", rgb=True, threshold=threshold)
         start_time = time.time()
@@ -310,17 +298,14 @@ class Tools(object):
 
     def click_image(self, image, timeout=10, threshold=0.7, interval=0.5, intervalfunc=None):
         """
-        检测并点击目标图片（调用exists_image获取坐标）
-
-        Args:
-            image (str): 图片名称（无需扩展名，默认查找images目录下的png文件）
-            timeout (int): 检测超时时间（单位：秒），默认10秒
-            threshold (float): 图像匹配阈值（0-1），默认0.7
-            interval (float): 检测间隔时间（单位：秒），默认0.5秒
-            intervalfunc (callable|None): 检测间隔期间执行的回调函数
-
-        Returns:
-            tuple|False: 找到图片时返回点击的中心坐标元组(x, y)，否则返回False
+        等待指定图片出现后点击其坐标
+        
+        :param image: 图片名称（不带扩展名，默认png格式）
+        :param timeout: 等待超时时间（秒），默认10秒
+        :param threshold: 图片匹配阈值（0-1），默认0.7
+        :param interval: 检测间隔时间（秒），默认0.5秒
+        :param intervalfunc: 检测间隔执行的函数（可选）
+        :return: 图片在屏幕中的坐标（元组形式），若未找到则返回False
         """
         match_pos = self.exists_image(image, timeout, threshold, interval, intervalfunc)
         if match_pos:
@@ -330,7 +315,7 @@ class Tools(object):
 
     def clear_sings(self):
         """
-        重置图像匹配位置信号（sings），允许下次重新检测
+        重置同步信号量，用于清除之前的状态记录
         """
         self.sings = None
 
