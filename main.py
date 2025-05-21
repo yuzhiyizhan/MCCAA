@@ -4,9 +4,9 @@ __author__ = "x"
 import re
 import threading
 import time
-import traceback
-from concurrent.futures import ThreadPoolExecutor
 
+from concurrent.futures import ThreadPoolExecutor
+import traceback
 import Levenshtein
 from airtest.core.api import snapshot, touch, sleep, click, wait, Template, G, connect_device, ST, start_app, stop_app
 from loguru import logger
@@ -16,7 +16,7 @@ from my_tools import Tools
 
 
 def debugOcr():
-    pic_path = r"./now.png"
+    pic_path = r"images/now.png"
     snapshot(pic_path)
     ocr = PaddleOCR(use_angle_cls=True, lang="ch")
     ocr_result = ocr.ocr(pic_path, cls=True)
@@ -31,7 +31,7 @@ def debugOcr():
 
 
 def cropped_image(x1, y1, x2, y2):
-    pic_path = r"./now.png"
+    pic_path = r"images/now.png"
     snapshot(pic_path)
 
     # 新增：图片裁剪逻辑（需根据实际需求调整裁剪坐标）
@@ -65,14 +65,15 @@ class MCCAA(object):
         """
         start_app("com.megagame.crosscore.bilibili")
         self.tools.click_txt("开始游戏", timeout=180)
-        self.tools.click_txt("今天不再提示", timeout=50)
+        self.tools.click_txt_le("今天不再提示", timeout=50)
         self.tools.click_image("x", threshold=0.6)
-        self.tools.click_txt("今天不再提示", timeout=10)
+        self.tools.click_txt_le("今天不再提示", timeout=10)
         self.tools.click_image("x", threshold=0.6)
         self.tools.click_txt("签到")
         self.tools.click_image("break", threshold=0.6)
 
     def task(self):
+        "领取日常任务"
         self.tools.click_txt("任务")
         self.tools.click_txt("日常")
         self.tools.click_txt_le("一键领取")
@@ -83,31 +84,33 @@ class MCCAA(object):
         self.tools.click_txt_le("一键领取")
         sleep(0.5)
         touch((600, 500))
-        self.tools.click_image("break", threshold=0.6)
+        sleep(0.5)
+        self.tools.click_image("home")
 
     def exercise(self):
+        "演习"
         self.tools.click_txt("出击")
         self.tools.click_txt("模拟军演")
         self.tools.click_txt("镜像竞技")
 
-        for i in range(10):
-            sleep(1)
+        # for i in range(10):
+        while True:
+            sleep(2)
             data = self.tools.get_ocr_cropped_result(cropped=[1022, 150, 82, 23])[0]
             power, coordinate = data.popitem()
-
-            # while int(power) > 3000:
-            #     self.tools.click_image("refresh", threshold=0.6)
-            #     data = self.tools.get_ocr_cropped_result(cropped=[1022, 150, 82, 23])[0]
-            #     power, coordinate = data.popitem()
-            #     sleep(1)
-            logger.debug(power)
-            logger.debug(coordinate)
-            touch(coordinate)
-            if self.tools.exists_ocr("今日可购买的模拟次数"):
-                break
-            self.tools.click_txt("挑战")
-            self.tools.click_txt("战斗胜利", timeout=120, click_timeout=2)
-            self.tools.click_txt("获得物品")
+            if int(power) > 30000:
+                self.tools.click_image("refresh", threshold=0.6)
+                sleep(1)
+                continue
+            else:
+                touch(coordinate)
+                if self.tools.exists_ocr("今日可购买的模拟次数"):
+                    touch((220,50))
+                    self.tools.click_image("home")
+                    return
+                self.tools.click_txt("挑战")
+                self.tools.click_txt("战斗胜利", timeout=120, click_timeout=2)
+                self.tools.click_txt("获得物品")
 
     def main(self, taskList):
         for task in taskList:
@@ -115,6 +118,7 @@ class MCCAA(object):
                 getattr(self, task)()
             except Exception as e:
                 logger.error(f"执行任务 {task} 时发生错误: {str(e)}")
+                traceback.print_exc()
                 # 执行debugOcr进行调试
                 debugOcr()
                 # 重新抛出异常以便上层处理
@@ -122,10 +126,13 @@ class MCCAA(object):
 
 
 if __name__ == "__main__":
-    taskList = ["exercise"]
+    # taskList = ["start", "task","exercise"]
+    taskList = ["task"]
     connect_device("Android:///emulator-5560")
     MCCAA().main(taskList)
     # debugOcr()
-    # tools = Tools().exists_txt("今日可购买的模拟次数")
+    # data = Tools().get_ocr_cropped_result(cropped=[1022, 150, 82, 23])[0]
+    # logger.debug(data)
+    # tools = Tools().exists_image("refresh")
     # logger.debug(tools)
     # cropped_image(1022,150,82,23)

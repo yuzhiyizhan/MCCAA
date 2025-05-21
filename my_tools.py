@@ -1,3 +1,5 @@
+import cv2
+
 import re
 import threading
 import time
@@ -9,6 +11,7 @@ from airtest.core.api import snapshot, touch, sleep, click, wait, Template, G, c
 from loguru import logger
 from paddleocr import PaddleOCR
 from PIL import Image
+
 
 class Tools(object):
     def __init__(self):
@@ -35,7 +38,7 @@ class Tools(object):
         startTime = time.time()
         logger.debug(f"判断: {target_text}")
         while True:
-            pic_path = r"./now.png"
+            pic_path = r"images/now.png"
             snapshot(pic_path)
             ocr_result = self.ocr.ocr(pic_path, cls=True)
             for line in ocr_result or list():
@@ -63,7 +66,7 @@ class Tools(object):
         startTime = time.time()
         logger.debug(f"判断: {target_text}")
         while True:
-            pic_path = r"./now.png"
+            pic_path = r"images/now.png"
             snapshot(pic_path)
             ocr_result = self.ocr.ocr(pic_path, cls=True)
             for line in ocr_result or list():
@@ -92,7 +95,7 @@ class Tools(object):
         startTime = time.time()
         logger.debug(f"判断: {target_text}")
         while True:
-            pic_path = r"./now.png"
+            pic_path = r"images/now.png"
             snapshot(pic_path)
             ocr_result = self.ocr.ocr(pic_path, cls=True)
             for line in ocr_result or list():
@@ -115,7 +118,7 @@ class Tools(object):
         """
         logger.debug("点击数字")
         _click = False
-        pic_path = r"./now.png"
+        pic_path = r"images/now.png"
         snapshot(pic_path)
         ocr_result = self.ocr.ocr(pic_path, cls=True)
         for line in ocr_result:
@@ -144,7 +147,7 @@ class Tools(object):
         :raises ValueError: 未找到目标文本时抛出异常
         """
         logger.debug(f"准备点击: {target_text}")
-        pic_path = r"./now.png"
+        pic_path = r"images/now.png"
         snapshot(pic_path)
         ocr_result = self.ocr.ocr(pic_path, cls=True)
         target_coords = None
@@ -181,7 +184,7 @@ class Tools(object):
         :raises ValueError: 未找到目标文本时抛出异常
         """
         logger.debug(f"准备点击: {target_text}")
-        pic_path = r"./now.png"
+        pic_path = r"images/now.png"
         snapshot(pic_path)
         ocr_result = self.ocr.ocr(pic_path, cls=True)
         target_coords = None
@@ -213,7 +216,7 @@ class Tools(object):
 
         :return: 包含文本和对应中心坐标的列表（格式：[{text: (x,y)}]）
         """
-        pic_path = r"./now.png"
+        pic_path = r"images/now.png"
         snapshot(pic_path)
         ocr_result = self.ocr.ocr(pic_path, cls=True)
         result = list()
@@ -237,7 +240,7 @@ class Tools(object):
         """
         if cropped is None:
             raise ValueError("cropped参数不能为空，需传入[x1, y1, width, height]格式的裁剪区域")
-
+        logger.debug(cropped)
         pic_path = r"./now.png"
         snapshot(pic_path)
         img = Image.open(pic_path)
@@ -245,7 +248,6 @@ class Tools(object):
         cropped_img = img.crop((cropped[0], cropped[1], cropped[0] + cropped[2], cropped[1] + cropped[3]))
         cropped_path = r"./cropped_now.png"
         cropped_img.save(cropped_path)  # 保存裁剪后的图片用于调试
-
         # 对裁剪后的图片进行OCR识别
         ocr_result = self.ocr.ocr(cropped_path, cls=True)
         result = list()
@@ -280,6 +282,19 @@ class Tools(object):
             sleep(click_timeout)
             touch(target_coords)
 
+    def click_ocr(self, target_text, timeout=10, click_timeout=0.5):
+        """
+        等待目标文本出现后点击其中心坐标
+
+        :param target_text: 要点击的目标文本内容
+        :param timeout: 等待超时时间（秒），默认10秒
+        :param click_timeout: 点击前等待时间（秒），默认0.5秒
+        """
+        target_coords = self.exists_ocr(target_text, timeout)
+        if target_coords:
+            sleep(click_timeout)
+            touch(target_coords)
+
     def click_txt_le(self, target_text, timeout=10, click_timeout=0.5, ratio=0.7):
         """
         等待模糊匹配的目标文本出现后点击其中心坐标
@@ -294,17 +309,17 @@ class Tools(object):
             sleep(click_timeout)
             touch(target_coords)
 
-    def wait_image(self, image):
-        """
-        等待指定图片出现在屏幕中
+    # def wait_image(self, image):
+    #     """
+    #     等待指定图片出现在屏幕中
+    #
+    #     :param image: 图片名称（不带扩展名，默认png格式）
+    #     :return: 图片在屏幕中的坐标（元组形式）
+    #     """
+    #     result = wait(Template(f"images/{image}.png"), timeout=30)
+    #     return result
 
-        :param image: 图片名称（不带扩展名，默认png格式）
-        :return: 图片在屏幕中的坐标（元组形式）
-        """
-        result = wait(Template(f"images/{image}.png"), timeout=30)
-        return result
-
-    def exists_image(self, image, timeout=10, threshold=0.7, interval=0.5, intervalfunc=None):
+    def exists_image(self, image, timeout=10, threshold=0.7, interval=0.5):
         """
         检测指定图片是否存在并返回其坐标
 
@@ -315,7 +330,7 @@ class Tools(object):
         :param intervalfunc: 检测间隔执行的函数（可选）
         :return: 图片在屏幕中的坐标（元组形式），若超时未找到则返回False
         """
-        query = Template(f"images/{image}.png", rgb=True, threshold=threshold)
+        # query = Template(f"images/{image}.png", rgb=True, threshold=threshold)
         start_time = time.time()
         if self.sings:
             return False
@@ -323,22 +338,37 @@ class Tools(object):
             while True:
                 if self.sings:
                     return False
-                screen = G.DEVICE.snapshot(filename=None, quality=ST.SNAPSHOT_QUALITY)
-                if screen is None:
-                    G.LOGGING.warning("Screen is None, may be locked")
-                else:
-                    if threshold:
-                        query.threshold = threshold
-                    match_pos = query.match_in(screen)
-                    if match_pos:
-                        # try_log_screen(screen)
-                        self.lock.acquire()
-                        if not self.sings:
-                            self.sings = match_pos
-                        self.lock.release()
-                        return match_pos
-                if intervalfunc is not None:
-                    intervalfunc()
+
+                screen_path = r"./now.png"
+                snapshot(screen_path)
+
+                img1 = cv2.imread(screen_path)
+                img2 = cv2.imread(f'./images/{image}.png')
+
+                result = cv2.matchTemplate(img1, img2, cv2.TM_CCOEFF_NORMED)
+
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+
+                # 返回最大匹配位置的坐标
+                if max_val > threshold:
+                    x, y = max_loc
+                    return (x, y)
+
+                # screen = G.DEVICE.snapshot(filename=None, quality=ST.SNAPSHOT_QUALITY)
+                # if screen is None:
+                #     G.LOGGING.warning("Screen is None, may be locked")
+                # else:
+                #     if threshold:
+                #         query.threshold = threshold
+                #     match_pos = query.match_in(screen)
+                #     if match_pos:
+                #         # try_log_screen(screen)
+                #         self.lock.acquire()
+                #         if not self.sings:
+                #             self.sings = match_pos
+                #         self.lock.release()
+                #         return match_pos
+
                 if (time.time() - start_time) > timeout:
                     # try_log_screen(screen)
                     return False
@@ -372,7 +402,7 @@ class Tools(object):
 
         while time.time() - start_time < timeout:
             # 实时截图并转为灰度图
-            screen_path = r"./now.png"
+            screen_path = r"images/now.png"
             snapshot(screen_path)
             screen = cv2.imread(screen_path, cv2.IMREAD_GRAYSCALE)
 
@@ -407,7 +437,7 @@ class Tools(object):
 
         return False
 
-    def click_image(self, image, timeout=10, threshold=0.7, interval=0.5, intervalfunc=None):
+    def click_image(self, image, timeout=10, threshold=0.7, interval=0.5):
         """
         等待指定图片出现后点击其坐标
 
@@ -418,7 +448,8 @@ class Tools(object):
         :param intervalfunc: 检测间隔执行的函数（可选）
         :return: 图片在屏幕中的坐标（元组形式），若未找到则返回False
         """
-        match_pos = self.exists_image(image, timeout, threshold, interval, intervalfunc)
+        logger.debug(f"等待图片 {image} 出现")
+        match_pos = self.exists_image(image, timeout, threshold, interval)
         if match_pos:
             touch(match_pos)
             return match_pos
