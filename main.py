@@ -8,7 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import traceback
 import Levenshtein
-from airtest.core.api import snapshot, touch, sleep, click, wait, Template, G, connect_device, ST, start_app, stop_app
+from airtest.core.api import snapshot, touch, wait, Template, G, connect_device, ST, start_app, stop_app
 from loguru import logger
 from paddleocr import PaddleOCR
 from PIL import Image
@@ -51,6 +51,10 @@ def cropped_image(x1, y1, x2, y2):
 class MCCAA(object):
     def __init__(self):
         self.tools = Tools()
+        self.COMMON_COORDINATES = {
+            'blank_point': (600, 500),  # 空白点
+            'purchase_count_point': (220, 50)  # home点的位置
+        }
 
     def start(self):
         """
@@ -73,44 +77,111 @@ class MCCAA(object):
         self.tools.click_image("break", threshold=0.6)
 
     def task(self):
-        "领取日常任务"
+        """
+        领取日常任务
+        :return:
+        """
         self.tools.click_txt("任务")
         self.tools.click_txt("日常")
         self.tools.click_txt_le("一键领取")
-        sleep(0.5)
-        touch((600, 500))
-
+        # s
+        touch(self.COMMON_COORDINATES['blank_point'])
         self.tools.click_txt("周常")
         self.tools.click_txt_le("一键领取")
-        sleep(0.5)
-        touch((600, 500))
-        sleep(0.5)
+        # s
+        touch(self.COMMON_COORDINATES['blank_point'])
         self.tools.click_image("home")
 
     def exercise(self):
-        "演习"
+        """
+        演习
+        :return:
+        """
         self.tools.click_txt("出击")
         self.tools.click_txt("模拟军演")
         self.tools.click_txt("镜像竞技")
 
         # for i in range(10):
         while True:
-            sleep(2)
+            self.tools.exists_ocr("战力")
             data = self.tools.get_ocr_cropped_result(cropped=[1022, 150, 82, 23])[0]
             power, coordinate = data.popitem()
             if int(power) > 30000:
                 self.tools.click_image("refresh", threshold=0.6)
-                sleep(1)
                 continue
             else:
                 touch(coordinate)
-                if self.tools.exists_ocr("今日可购买的模拟次数"):
-                    touch((220,50))
+                if self.tools.exists_ocr("今日可购买的模拟次数", timeout=3):
+                    touch(self.COMMON_COORDINATES['purchase_count_point'])
                     self.tools.click_image("home")
                     return
                 self.tools.click_txt("挑战")
                 self.tools.click_txt("战斗胜利", timeout=120, click_timeout=2)
                 self.tools.click_txt("获得物品")
+
+    def trade(self):
+        """
+        换票
+        :return:
+        """
+        self.tools.click_txt("基地")
+
+        self.tools.exists_image("trade", threshold=0.9)
+        self.tools.click_image("trade", threshold=0.9)
+
+        def touch_money():
+            data = self.tools.exists_ocr("构建订单", timeout=3)
+            if data:
+                tempList = list(data)
+                tempList[1] += 200
+                data = tuple(tempList)
+                touch(data)
+                if self.tools.exists_ocr("订单兑换所需素材不足", timeout=3):
+                    return False
+                self.tools.click_txt("确定", timeout=3)
+                self.tools.click_txt("获得物品", timeout=3)
+
+        sings = touch_money()
+        if not sings:
+            self.tools.click_txt("取消")
+            self.tools.click_image("home")
+            return
+        self.tools.click_txt("选择好友")
+        self.tools.click_txt("拜访")
+
+        while True:
+            sings = touch_money()
+            if not sings:
+                self.tools.click_txt("取消")
+                self.tools.click_image("home")
+                return
+            data = self.tools.exists_image("next", timeout=3, threshold=0.9)
+            if data:
+                touch(data)
+            else:
+                break
+        self.tools.click_image("home")
+
+    def change(self):
+        """
+        合成黑匣
+        :return:
+        """
+        self.tools.click_txt("基地")
+        data = self.tools.exists_image("mine", timeout=3, threshold=0.9)
+        if not data:
+            self.tools.click_image("home")
+            return
+        self.tools.click_image("mine", threshold=0.9)
+        self.tools.click_txt("获得物品")
+        self.tools.click_txt("合成工厂")
+        self.tools.click_image("factory")
+        self.tools.click_txt("基地素材")
+        self.tools.click_txt("稀有黑匣")
+        self.tools.click_image("next_fast", threshold=0.8)
+        self.tools.click_txt("确定")
+        self.tools.click_txt("获得物品")
+        self.tools.click_image("home")
 
     def main(self, taskList):
         for task in taskList:
@@ -126,13 +197,20 @@ class MCCAA(object):
 
 
 if __name__ == "__main__":
-    # taskList = ["start", "task","exercise"]
-    taskList = ["task"]
+    # taskList = ["start", "task","exercise","trade"]
+    taskList = ["change"]
     connect_device("Android:///emulator-5560")
     MCCAA().main(taskList)
+
+
+
     # debugOcr()
     # data = Tools().get_ocr_cropped_result(cropped=[1022, 150, 82, 23])[0]
     # logger.debug(data)
-    # tools = Tools().exists_image("refresh")
+    # tools = Tools().exists_image("factory", timeout=3, threshold=0.9)
+    # tempList = list(tools)
+    # tempList[1]+=200
+    # tools = tuple(tempList)
+    # touch(tools)
     # logger.debug(tools)
     # cropped_image(1022,150,82,23)

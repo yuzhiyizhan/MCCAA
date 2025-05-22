@@ -319,7 +319,7 @@ class Tools(object):
     #     result = wait(Template(f"images/{image}.png"), timeout=30)
     #     return result
 
-    def exists_image(self, image, timeout=10, threshold=0.7, interval=0.5):
+    def exists_image(self, image, timeout=10, threshold=0.7, interval=0.5, click_timeout=0.5):
         """
         检测指定图片是否存在并返回其坐标
 
@@ -331,6 +331,7 @@ class Tools(object):
         :return: 图片在屏幕中的坐标（元组形式），若超时未找到则返回False
         """
         # query = Template(f"images/{image}.png", rgb=True, threshold=threshold)
+        logger.debug(f"判断图片{image}是否存在")
         start_time = time.time()
         if self.sings:
             return False
@@ -375,69 +376,8 @@ class Tools(object):
                 else:
                     time.sleep(interval)
 
-    def exists_image_opencv(self, image, timeout=10, threshold=0.7, interval=0.5, intervalfunc=None):
-        """
-        检测指定图片是否存在并返回其坐标（OpenCV版）
-        优势：支持旋转/缩放不变匹配，适合复杂场景
 
-        :param image: 图片名称（不带扩展名，默认png格式）
-        :param timeout: 检测超时时间（秒），默认10秒
-        :param threshold: 图片匹配阈值（0-1），默认0.7
-        :param interval: 检测间隔时间（秒），默认0.5秒
-        :param intervalfunc: 检测间隔执行的函数（可选）
-        :return: 图片在屏幕中的坐标（元组形式），若超时未找到则返回False
-        """
-        import cv2
-        start_time = time.time()
-        template_path = f"images/{image}.png"
-
-        # 加载模板并转为灰度图
-        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
-        if template is None:
-            raise FileNotFoundError(f"模板图片 {template_path} 不存在")
-
-        # 初始化ORB特征检测器（支持旋转/缩放不变匹配，适合复杂场景）
-        orb = cv2.ORB_create()  # ORB结合了FAST关键点检测和BRIEF描述子
-        kp_template, des_template = orb.detectAndCompute(template, None)  # 提取模板图的特征点和描述符
-
-        while time.time() - start_time < timeout:
-            # 实时截图并转为灰度图
-            screen_path = r"images/now.png"
-            snapshot(screen_path)
-            screen = cv2.imread(screen_path, cv2.IMREAD_GRAYSCALE)
-
-            # 检测屏幕特征点
-            kp_screen, des_screen = orb.detectAndCompute(screen, None)
-
-            # 特征匹配（使用汉明距离）
-            bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-            matches = bf.match(des_template, des_screen)
-
-            # 按匹配质量排序
-            matches = sorted(matches, key=lambda x: x.distance)
-
-            # 新增：处理空匹配情况
-            if len(matches) == 0:
-                if intervalfunc:
-                    intervalfunc()
-                time.sleep(interval)
-                continue
-
-            # 计算有效匹配比例
-            good_matches = [m for m in matches if m.distance < 30]  # 阈值可根据实际调整
-            if len(good_matches) / len(matches) >= threshold:
-                # 计算中心点坐标（取匹配点的平均位置）
-                points = [kp_screen[m.trainIdx].pt for m in good_matches]
-                center = (sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points))
-                return (int(center[0]), int(center[1]))
-
-            if intervalfunc:
-                intervalfunc()
-            time.sleep(interval)
-
-        return False
-
-    def click_image(self, image, timeout=10, threshold=0.7, interval=0.5):
+    def click_image(self, image, timeout=10, threshold=0.7, interval=0.5,click_timeout=0):
         """
         等待指定图片出现后点击其坐标
 
@@ -451,6 +391,7 @@ class Tools(object):
         logger.debug(f"等待图片 {image} 出现")
         match_pos = self.exists_image(image, timeout, threshold, interval)
         if match_pos:
+            sleep(click_timeout)
             touch(match_pos)
             return match_pos
         return False
