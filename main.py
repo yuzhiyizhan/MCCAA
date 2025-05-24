@@ -4,6 +4,9 @@ __author__ = "x"
 import re
 import threading
 import time
+import json
+import os
+import subprocess
 
 from concurrent.futures import ThreadPoolExecutor
 import traceback
@@ -45,6 +48,162 @@ def cropped_image(x1, y1, x2, y2):
     # 保存裁剪后的图片
     cropped_path = r"./cropped_now.png"
     cropped_img.save(cropped_path)
+
+
+class DeviceManager:
+    """
+    设备管理类，用于处理ADB设备的选择和配置保存
+    """
+    def __init__(self, config_file="device_config.json"):
+        """
+        初始化设备管理器
+        
+        :param config_file: 配置文件路径，默认为device_config.json
+        """
+        self.config_file = config_file
+        self.config = self.load_config()
+    
+    def load_config(self):
+        """
+        加载设备配置文件
+        
+        :return: 配置字典，如果文件不存在则返回空字典
+        """
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.error(f"加载配置文件失败: {e}")
+                return {}
+        return {}
+    
+    def save_config(self):
+        """
+        保存设备配置到文件
+        """
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, ensure_ascii=False, indent=2)
+            logger.info(f"配置已保存到 {self.config_file}")
+        except Exception as e:
+            logger.error(f"保存配置文件失败: {e}")
+    
+    def get_adb_devices(self):
+        """
+        获取当前可用的ADB设备列表
+        
+        :return: 设备列表，格式为[(设备ID, 设备状态), ...]
+        """
+        try:
+            result = subprocess.run(['adb', 'devices'], capture_output=True, text=True, encoding='utf-8')
+            if result.returncode != 0:
+                logger.error("ADB命令执行失败，请确保ADB已正确安装并添加到环境变量")
+                return []
+            
+            lines = result.stdout.strip().split('\n')
+            devices = []
+            
+            for line in lines[1:]:  # 跳过第一行标题
+                if line.strip():
+                    parts = line.split('\t')
+                    if len(parts) >= 2:
+                        device_id = parts[0].strip()
+                        status = parts[1].strip()
+                        if status == 'device':  # 只返回正常连接的设备
+                            devices.append((device_id, status))
+            
+            return devices
+        except FileNotFoundError:
+            logger.error("未找到ADB命令，请确保ADB已正确安装并添加到环境变量")
+            return []
+        except Exception as e:
+            logger.error(f"获取ADB设备列表失败: {e}")
+            return []
+    
+    def select_device(self):
+        """
+        让用户选择要连接的设备
+        
+        :return: 选择的设备ID，如果取消选择则返回None
+        """
+        # 检查是否有保存的设备配置
+        if 'last_device' in self.config:
+            last_device = self.config['last_device']
+            print(f"\n上次使用的设备: {last_device}")
+
+            # 验证设备是否仍然可用
+            devices = self.get_adb_devices()
+            device_ids = [device[0] for device in devices]
+            if last_device in device_ids:
+                logger.info(f"使用上次保存的设备: {last_device}")
+                return last_device
+            else:
+                print(f"上次的设备 {last_device} 当前不可用，请重新选择")
+        
+        # 获取当前可用设备
+        devices = self.get_adb_devices()
+        
+        if not devices:
+            print("\n未找到可用的ADB设备，请确保：")
+            print("1. 设备已连接并开启USB调试")
+            print("2. ADB驱动已正确安装")
+            print("3. 已授权ADB调试权限")
+            return None
+        
+        print("\n可用的ADB设备:")
+        for i, (device_id, status) in enumerate(devices, 1):
+            print(f"{i}. {device_id} ({status})")
+        
+        while True:
+            try:
+                choice = input(f"\n请选择设备 (1-{len(devices)}, 输入0取消): ").strip()
+                if choice == '0':
+                    return None
+                
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(devices):
+                    selected_device = devices[choice_num - 1][0]
+                    
+                    # 保存选择的设备
+                    self.config['last_device'] = selected_device
+                    self.save_config()
+                    
+                    logger.info(f"已选择设备: {selected_device}")
+                    return selected_device
+                else:
+                    print(f"请输入1到{len(devices)}之间的数字")
+            except ValueError:
+                print("请输入有效的数字")
+            except KeyboardInterrupt:
+                print("\n操作已取消")
+                return None
+    
+    def connect_device(self):
+        """
+        连接选择的设备
+        
+        :return: 连接成功返回True，失败返回False
+        """
+        device_id = self.select_device()
+        if not device_id:
+            logger.error("未选择设备，程序退出")
+            return False
+        
+        try:
+            # 构建连接字符串
+            if 'emulator' in device_id:
+                connect_string = f"Android:///{device_id}"
+            else:
+                connect_string = f"Android:///{device_id}"
+            
+            logger.info(f"正在连接设备: {connect_string}")
+            connect_device(connect_string)
+            logger.info("设备连接成功")
+            return True
+        except Exception as e:
+            logger.error(f"设备连接失败: {e}")
+            return False
 
 
 # 空白点 600，500
@@ -91,6 +250,25 @@ class MCCAA(object):
         # s
         touch(self.COMMON_COORDINATES['blank_point'])
         self.tools.click_image("home")
+        self.tools.click_txt("勘探指南")
+        self.tools.click_txt("任务")
+        self.tools.click_txt("每日任务")
+        self.tools.click_txt("领取奖励")
+        self.tools.click_txt("获得物品")
+        self.tools.click_txt("每周任务")
+        self.tools.click_txt("领取奖励")
+        self.tools.click_txt("获得物品")
+        self.tools.click_txt("本期任务")
+        self.tools.click_txt("领取奖励")
+        self.tools.click_txt("获得物品")
+        touch(self.COMMON_COORDINATES['purchase_count_point'])
+        data = self.tools.exists_txt("全部领取")
+        if data:
+            self.tools.click_txt("全部领取")
+            self.tools.click_txt("获得物品")
+        self.tools.click_image("home")
+
+
 
     def exercise(self):
         """
@@ -141,11 +319,11 @@ class MCCAA(object):
                 self.tools.click_txt("确定", timeout=3)
                 self.tools.click_txt("获得物品", timeout=3)
 
-        sings = touch_money()
-        if not sings:
-            self.tools.click_txt("取消")
-            self.tools.click_image("home")
-            return
+        touch_money()
+        # if not sings:
+        #     self.tools.click_txt("取消")
+        #     self.tools.click_image("home")
+        #     return
         self.tools.click_txt("选择好友")
         self.tools.click_txt("拜访")
 
@@ -181,6 +359,7 @@ class MCCAA(object):
         self.tools.click_image("next_fast", threshold=0.8)
         self.tools.click_txt("确定")
         self.tools.click_txt("获得物品")
+        self.tools.click_txt("合成成功")
         self.tools.click_image("home")
 
     def main(self, taskList):
@@ -197,12 +376,22 @@ class MCCAA(object):
 
 
 if __name__ == "__main__":
-    # taskList = ["start", "task","exercise","trade"]
-    taskList = ["change"]
-    connect_device("Android:///emulator-5560")
-    MCCAA().main(taskList)
-
-
+    # taskList = ["start", "exercise", "change", "trade", "task"]
+    taskList = ["task"]
+    
+    # 使用设备管理器连接设备
+    device_manager = DeviceManager()
+    if not device_manager.connect_device():
+        logger.error("设备连接失败，程序退出")
+        exit(1)
+    
+    # 执行游戏任务
+    try:
+        MCCAA().main(taskList)
+    except Exception as e:
+        logger.error(f"执行任务时发生错误: {e}")
+        debugOcr()
+        traceback.print_exc()
 
     # debugOcr()
     # data = Tools().get_ocr_cropped_result(cropped=[1022, 150, 82, 23])[0]

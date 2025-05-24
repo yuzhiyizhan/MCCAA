@@ -1,0 +1,7 @@
+schedule
+loguru
+Pillow
+opencv-python
+paddleocr
+airtest
+Levenshtein
